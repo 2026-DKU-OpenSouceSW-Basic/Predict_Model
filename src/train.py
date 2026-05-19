@@ -12,7 +12,7 @@ def train():
     print(f"[INFO] Using Device: {device}")
 
     # 데이터 로더 (미리 만든 더미 데이터 사용)
-    dataset = BlogDataset("dummy_data.json")
+    dataset = BlogDataset("dummy_data.jsonl")
     dataloader = DataLoader(dataset, batch_size=2, shuffle=True)
 
     # 모델 초기화
