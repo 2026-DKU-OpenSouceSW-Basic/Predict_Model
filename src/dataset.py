@@ -5,9 +5,12 @@ from transformers import AutoTokenizer
 
 class BlogDataset(Dataset):
     def __init__(self, json_file, max_paragraphs=10, max_seq_len=128):
-        # 1. 데이터 로드
+        # 1. 데이터 로드 (JSONL 형식 읽기)
+        self.data = []
         with open(json_file, 'r', encoding='utf-8') as f:
-            self.data = json.load(f)
+            for line in f:
+                if line.strip():
+                    self.data.append(json.loads(line))
             
         self.max_paragraphs = max_paragraphs
         self.max_seq_len = max_seq_len
@@ -84,7 +87,7 @@ class BlogDataset(Dataset):
 
 # 테스트 코드 (이 파일만 실행했을 때 작동)
 if __name__ == "__main__":
-    dataset = BlogDataset("dummy_data.json")
+    dataset = BlogDataset("dummy_data.jsonl")
     dataloader = DataLoader(dataset, batch_size=2, shuffle=True)
     for batch in dataloader:
         print("Input IDs Shape:", batch['input_ids'].shape) # (Batch, Para, Seq)
