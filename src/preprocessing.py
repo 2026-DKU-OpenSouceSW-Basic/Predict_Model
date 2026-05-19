@@ -118,8 +118,17 @@ class BlogPreprocessor:
         
         soft_label = label
         if label == 1 and processed_paragraphs:
-            num_samples = min(5, len(processed_paragraphs))
-            sampled_paras = random.sample(processed_paragraphs, num_samples)
+            total_paras = len(processed_paragraphs)
+            
+            if total_paras > 10:
+                middle_paras = processed_paragraphs[5:-5]
+            elif total_paras > 2:
+                middle_paras = processed_paragraphs[1:-1]
+            else:
+                middle_paras = processed_paragraphs
+                
+            num_samples = min(5, len(middle_paras))
+            sampled_paras = random.sample(middle_paras, num_samples)
             
             total_negative_score = 0.0
             valid_samples = 0
