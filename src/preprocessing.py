@@ -1,5 +1,4 @@
 from kiwipiepy import Kiwi
-from collections import Counter
 import re
 import json
 import random
@@ -34,99 +33,39 @@ class BlogPreprocessor:
         
         if temp_forms and 'NNP' in temp_tags:
             phrases.append("".join(temp_forms))
-        
-        return Counter(phrases)
+        return phrases
 
-    def _find_target_keywords(self, title, body):
-        """제목과 본문의 교차 검증을 통해 타겟 키워드(광고 대상)를 모두 찾아냅니다."""
-        phrase_counter = self._extract_noun_phrases(body)
-        title_no_space = title.replace(" ", "")
-
-        targets = []
-        for phrase, count in phrase_counter.most_common():
-            if count >= self.min_target_count:
-
-                if phrase in title_no_space:
-                    targets.append(phrase)
-                    continue
-
-                tokens = [t.form for t in self.kiwi.tokenize(phrase) if t.tag in ['NNP', 'NNG']]
-                if len(tokens) >= 2 and all(t in title_no_space for t in tokens):
-                    targets.append(phrase)
+    def process(self, title, body, label=None, is_my_money=False, detected_reason=None):
+        # 1. 전체 이미지 개수 카운트
+        total_images = len(re.findall(r'\[image_\d+\]', body, flags=re.IGNORECASE))
         
-        return targets if targets else None
-
-    def _get_fuzzy_pattern(self, keyword):
-        """키워드의 핵심 명사들 사이에 임의의 문자가 올 수 있는 정규표현식을 생성합니다."""
-        tokens = [t.form for t in self.kiwi.tokenize(keyword) if t.tag in ['NNP', 'NNG']]
+        # 2. 타겟 키워드 추출 (제목에서)
+        target_keywords = self._extract_noun_phrases(title)
         
-        if not tokens:
-            return re.escape(keyword)
-        
-        if len(tokens) == 1:
-            return r'\s*'.join(list(re.escape(tokens[0])))
-        
-        pattern = r'\s*[^.!?]{0,10}\s*'.join([re.escape(t) for t in tokens])
-        return pattern
-
-    def process(self, title, body, label=None):
-        """
-        크롤링된 원본 데이터를 받아 학습용 정제 데이터(JSON 형식)로 변환합니다.
-        [이미지] 태그를 기준으로 문단을 나누는 새로운 로직을 적용합니다.
-        """
-        target_keywords = self._find_target_keywords(title, body)
-        phrase_counter = self._extract_noun_phrases(body)
-        
-        masked_body = body
-        if target_keywords:
-            target_keywords.sort(key=len, reverse=True)
-            for keyword in target_keywords:
-                fuzzy_pattern = self._get_fuzzy_pattern(keyword)
-                masked_body = re.sub(fuzzy_pattern, "[TARGET]", masked_body)
-
-        parts = re.split(r'(\[이미지\])', masked_body)
-        
+        # 3. 문단 분리 및 로컬 피처 추출
+        paragraphs = [p.strip() for p in body.split('\n') if p.strip()]
         processed_paragraphs = []
-        current_text = ""
-        current_images = 0
+        target_frequency = 0
+        total_len = len(body)
         
-        for part in parts:
-            if part == "[이미지]":
-                current_images += 1
-            else:
-                current_text += part + " "
-                
-
-                if len(current_text.replace(" ", "")) >= 50:
-                    processed_paragraphs.append({
-                        "text": current_text.strip(),
-                        "images": current_images
-                    })
-                    current_text = ""
-                    current_images = 0
-        
-        if current_text.strip() or current_images > 0:
-            processed_paragraphs.append({
-                "text": current_text.strip(),
-                "images": current_images
-            })
-
-        total_images = body.count('[이미지]')
-        total_len = len(body.replace(" ", ""))
-        
-        target_frequency = masked_body.count("[TARGET]")
-        
-        soft_label = label
-        if label == 1 and processed_paragraphs:
-            total_paras = len(processed_paragraphs)
+        for para in paragraphs:
+            img_count = len(re.findall(r'\[image_\d+\]', para, flags=re.IGNORECASE))
+            clean_text = re.sub(r'\[image_\d+\]', '', para).strip()
+            clean_text = re.sub(r'\[이미지 텍스트:.*?\]', '', clean_text).strip()
             
-            if total_paras > 10:
-                middle_paras = processed_paragraphs[5:-5]
-            elif total_paras > 2:
-                middle_paras = processed_paragraphs[1:-1]
-            else:
-                middle_paras = processed_paragraphs
-                
+            if clean_text:
+                for kw in target_keywords:
+                    target_frequency += clean_text.count(kw)
+                    
+                processed_paragraphs.append({
+                    "text": clean_text,
+                    "image_count": img_count
+                })
+        
+        # 4. 감성 분석 (Soft Label 대신 Sentiment Score 피처로 추출)
+        sentiment_score = 0.5
+        if processed_paragraphs:
+            middle_paras = processed_paragraphs
             num_samples = min(5, len(middle_paras))
             sampled_paras = random.sample(middle_paras, num_samples)
             
@@ -145,22 +84,25 @@ class BlogPreprocessor:
             
             if valid_samples > 0:
                 avg_negative_score = total_negative_score / valid_samples
-                soft_label = 1.0 - (avg_negative_score * 0.5)
-                soft_label = round(soft_label, 3)
+                sentiment_score = 1.0 - (avg_negative_score * 0.5)
+                sentiment_score = round(sentiment_score, 3)
 
+        # 5. 최종 딕셔너리 생성 (오답노트 기록 보존, 정답 보존)
         result = {
             "metadata": {
                 "title": title,
                 "target": target_keywords,
-                "label": soft_label
+                "label": label,                                      
+                "is_my_money": is_my_money,                          # 모델 입력X
+                "detected_reason": detected_reason if detected_reason else [] # 모델 입력X
             },
             "global_features": {
                 "total_images": total_images,
                 "total_length": total_len,
                 "paragraph_count": len(processed_paragraphs),
-                "target_frequency": target_frequency
+                "target_frequency": target_frequency,
+                "sentiment_score": sentiment_score          # 감성점수를 5번째 피처로 추가
             },
             "paragraphs": processed_paragraphs
         }
-        
         return result
