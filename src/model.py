@@ -6,11 +6,9 @@ class BlogAdClassifier(nn.Module):
     def __init__(self, hidden_dim=256, local_feature_dim=1, global_feature_dim=5):
         super(BlogAdClassifier, self).__init__()
         
-        # 1. kcELECTRA 모델 (문단 임베딩)
         self.electra = AutoModel.from_pretrained("beomi/KcELECTRA-base-v2022")
         self.electra_dim = self.electra.config.hidden_size 
         
-        # 2. Bi-LSTM 계층
         lstm_input_dim = self.electra_dim + local_feature_dim
         self.lstm = nn.LSTM(
             input_size=lstm_input_dim,
