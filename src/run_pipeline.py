@@ -1,5 +1,4 @@
 import json
-import csv
 from preprocessing import BlogPreprocessor
 
 def run_bulk_preprocessing(input_file, output_file):
@@ -18,10 +17,13 @@ def run_bulk_preprocessing(input_file, output_file):
     print(f"[INFO] 총 {len(raw_posts)}개의 데이터 전처리 시작...")
     for post in raw_posts:
         try:
+            # 5개의 파라미터 모두 전달 (is_my_money, detected_reason 포함)
             result = preprocessor.process(
                 title=post.get('title', ''),
                 body=post.get('body', ''),
-                label=post.get('label', None)
+                label=post.get('label', None),
+                is_my_money=post.get('is_my_money', False),
+                detected_reason=post.get('detected_reason', [])
             )
             processed_data.append(result)
         except Exception as e:
@@ -32,3 +34,6 @@ def run_bulk_preprocessing(input_file, output_file):
             f.write(json.dumps(item, ensure_ascii=False) + '\n')
 
     print(f"[OK] 전처리 완료! 결과 저장됨: {output_file}")
+
+if __name__ == "__main__":
+    run_bulk_preprocessing("blog_data.json", "output_data.jsonl")
