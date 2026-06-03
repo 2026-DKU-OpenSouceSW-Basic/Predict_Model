@@ -56,6 +56,7 @@ class BlogPreprocessor:
             if clean_text:
                 for kw in target_keywords:
                     target_frequency += clean_text.count(kw)
+                    clean_text = clean_text.replace(kw, '[TARGET]')
                     
                 processed_paragraphs.append({
                     "text": clean_text,

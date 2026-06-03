@@ -15,7 +15,8 @@ def run_bulk_preprocessing(input_file, output_file):
         return
 
     print(f"[INFO] 총 {len(raw_posts)}개의 데이터 전처리 시작...")
-    for post in raw_posts:
+    skipped = []
+    for i, post in enumerate(raw_posts):
         try:
             # 5개의 파라미터 모두 전달 (is_my_money, detected_reason 포함)
             result = preprocessor.process(
@@ -27,13 +28,24 @@ def run_bulk_preprocessing(input_file, output_file):
             )
             processed_data.append(result)
         except Exception as e:
-            print(f"[SKIP] 에러 발생으로 건너뜁니다: {e}")
+            label = post.get('label', '?')
+            title = post.get('title', '제목없음')[:30]
+            skipped.append({'index': i, 'label': label, 'title': title, 'error': str(e)})
+            print(f"[SKIP] #{i} (label={label}) '{title}...' → {e}")
 
     with open(output_file, 'w', encoding='utf-8') as f:
         for item in processed_data:
             f.write(json.dumps(item, ensure_ascii=False) + '\n')
 
-    print(f"[OK] 전처리 완료! 결과 저장됨: {output_file}")
+    # 누락 데이터 요약 출력
+    if skipped:
+        skip_labels = [s['label'] for s in skipped]
+        print(f"\n⚠️  [경고] 총 {len(skipped)}개 데이터 누락!")
+        print(f"   광고(1) 누락: {skip_labels.count(1)}개")
+        print(f"   내돈(0) 누락: {skip_labels.count(0)}개")
+    
+    print(f"[OK] 전처리 완료! 결과 저장됨: {output_file} ({len(processed_data)}개)")
+
 
 if __name__ == "__main__":
     run_bulk_preprocessing("blog_data.json", "output_data.jsonl")
