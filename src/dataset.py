@@ -59,10 +59,10 @@ class BlogDataset(Dataset):
         # --- 글로벌 피처 추출 (감성점수 포함 총 5개) ---
         gf = item.get('global_features', {})
         global_features = torch.tensor([
-            gf.get('total_images', 0),
-            gf.get('total_length', 0),
-            gf.get('paragraph_count', 0),
-            gf.get('target_frequency', 0),
+            gf.get('total_images', 0) / 100.0,
+            gf.get('total_length', 0) / 8000.0,
+            gf.get('paragraph_count', 0) / 50.0,
+            gf.get('target_frequency', 0) / 40.0,
             gf.get('sentiment_score', 0.5)  # 5번째 피처 (감성점수)
         ], dtype=torch.float)
 
