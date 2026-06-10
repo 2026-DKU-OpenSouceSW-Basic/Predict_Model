@@ -1,0 +1,14 @@
+torch
+transformers
+kiwipiepy
+paddlepaddle
+paddleocr
+selenium
+webdriver-manager
+shap
+fastapi
+uvicorn
+scikit-learn
+requests
+numpy
+pydantic
