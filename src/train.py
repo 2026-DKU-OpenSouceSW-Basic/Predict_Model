@@ -1,18 +1,19 @@
 # -*- coding: utf-8 -*-
 import torch
 import torch.nn as nn
+import numpy as np
 from torch.optim import AdamW
 from torch.utils.data import DataLoader, random_split
 from dataset import BlogDataset
 from model import BlogAdClassifier
-from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score # 평가지표 라이브러리 추가
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, brier_score_loss
 
 def train():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"[INFO] Using Device: {device}")
 
     # --- [개선] Train/Validation 분리 (8:2) ---
-    full_dataset = BlogDataset("output_data.jsonl")
+    full_dataset = BlogDataset("output_data.jsonl", fit_stats=True)
     total_size = len(full_dataset)
     val_size = int(total_size * 0.2)
     train_size = total_size - val_size
@@ -31,7 +32,7 @@ def train():
     
     # --- [개선] ELECTRA 하위 레이어 프리징 (과적합 방지) ---
     # ELECTRA의 12층 중 하위 10층을 고정하고, 상위 2층만 미세조정합니다.
-    # 590개 데이터로 1.1억 파라미터 전체를 학습하면 과적합이 심하기 때문입니다.
+    # 약 1,900개 데이터로 1.1억 파라미터 전체를 학습하면 과적합이 심하기 때문입니다.
     for param in model.electra.embeddings.parameters():
         param.requires_grad = False
     for layer in model.electra.encoder.layer[:10]:  # 12층 중 하위 10층 고정
@@ -107,6 +108,7 @@ def train():
         model.eval()
         val_labels = []
         val_preds = []
+        val_probs_list = []  # Brier Score 계산을 위한 raw 확률 수집
         val_loss = 0
         
         with torch.no_grad():
@@ -135,6 +137,7 @@ def train():
                 
                 val_labels.extend(labels.cpu().numpy())
                 val_preds.extend(preds.cpu().numpy())
+                val_probs_list.extend(probs.cpu().numpy())  # raw 확률 저장
         
         # --- [검증 평가지표] ---
         avg_val_loss = val_loss / max(len(val_loader), 1)
@@ -143,11 +146,17 @@ def train():
         val_recall = recall_score(val_labels, val_preds, zero_division=0)
         val_f1 = f1_score(val_labels, val_preds, zero_division=0)
         
+        # --- [Brier Score] 확률 캘리브레이션 품질 측정 (낮을수록 좋음) ---
+        val_labels_flat = np.array(val_labels).flatten()
+        val_probs_flat = np.array(val_probs_list).flatten()
+        val_brier = brier_score_loss(val_labels_flat, val_probs_flat)
+        
         print("=" * 60)
         print(f"🔄 Epoch {epoch+1}/{epochs} 완료!")
         print(f"  [훈련] 📉 Loss: {avg_loss:.4f} | 🎯 Acc: {train_acc*100:.1f}% | 🏆 F1: {train_f1*100:.1f}%")
         print(f"  [검증] 📉 Loss: {avg_val_loss:.4f} | 🎯 Acc: {val_acc*100:.1f}% | 🏆 F1: {val_f1*100:.1f}%")
         print(f"         🔎 Precision: {val_precision*100:.1f}% | 🎣 Recall: {val_recall*100:.1f}%")
+        print(f"         📐 Brier Score: {val_brier:.4f} (낮을수록 좋음, 완벽=0.0)")
         
         # 과적합 경고: 훈련 성능은 높은데 검증 성능이 낮으면 경고
         if train_acc - val_acc > 0.15:
