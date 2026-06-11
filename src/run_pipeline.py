@@ -49,3 +49,12 @@ def run_bulk_preprocessing(input_file, output_file):
 
 if __name__ == "__main__":
     run_bulk_preprocessing("blog_data.json", "output_data.jsonl")
+    
+    # 전처리 완료 후 자동으로 신규 데이터셋에 맞게 feature_stats.json(평균 및 표준편차) 갱신
+    print("\n[INFO] 새로운 데이터셋에 맞춰 feature_stats.json 갱신 중...")
+    from dataset import BlogDataset
+    try:
+        BlogDataset("output_data.jsonl", fit_stats=True)
+        print("[OK] feature_stats.json 갱신 완료!")
+    except Exception as e:
+        print(f"[ERROR] feature_stats.json 갱신 실패: {e}")
